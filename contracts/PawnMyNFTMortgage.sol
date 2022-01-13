@@ -1,47 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "./PawnMyNFT.sol";
+import "./Pawn.sol";
 import "./Locker.sol";
-import "./Lib.sol";
 
-contract PawnMyNFTMortgage is PawnMyNFT {
-    using SafeMath for uint256;
-    using StringLibrary for string;
-    using UintLibrary for uint256;
-
-    uint256 public platformFee = 25;
-    uint256 public totalLoans = 0;
-    uint256 public totalActiveLoans = 0;
-    uint256 public maximumLoanDuration = 105 weeks;
-
-    Locker public locker;
-
+contract PawnMortgage is Pawn {
     constructor(Locker _locker) {
         locker = _locker;
     }
 
-    mapping(address => bool) public erc20Whitelist;
+    uint256 public platformFee = 250;
+    uint256 public totalLoans = 0;
+    uint256 public totalActiveLoans = 0;
+    uint256 public maximumLoanDuration = 105 weeks;
 
     struct Loan {
         uint256 loanId;
         uint256 loanPrincipalAmount;
         uint256 repaymentAmount;
-        uint256 nftTokenId;         // nft token id
-        uint256 loanStartTime;      // The block.timestamp when the loan first began (measured in seconds).
-        uint256 loanDuration;       // The amount of time (measured in seconds) that can elapse before the lender can liquidate the loan and seize the underlying collateral.
+        uint256 nftTokenId; // nft token id
+        uint256 loanStartTime; // The block.timestamp when the loan first began (measured in seconds).
+        uint256 loanDuration; // The amount of time (measured in seconds) that can elapse before the lender can liquidate the loan and seize the underlying collateral.
         uint256 platformFee;
-        address erc721Contract;     // nft erc721 contract
-        address whitelistedERC20;   // whitelisted erc20 token
+        address erc721Contract; // nft erc721 contract
+        address whitelistedERC20; // whitelisted erc20 token
         address borrower;
     }
 
@@ -49,7 +31,11 @@ contract PawnMyNFTMortgage is PawnMyNFT {
     mapping(uint256 => bool) public loanRepaidOrLiquidated;
     mapping(address => mapping(uint256 => bool)) private _userNonce;
     mapping(address => mapping(uint256 => bool)) private _isOnLend;
-    mapping(address => mapping(uint256 => uint256)) private _loanIdByTokenAddressTokenId;
+    mapping(address => mapping(uint256 => uint256))
+        private _loanIdByTokenAddressTokenId;
+    mapping(address => bool) public erc20Whitelist;
+
+    Locker public locker;
 
     // EVENTS
     event PlatformFeeUpdated(uint256 _oldFee, uint256 _newFee);
@@ -105,6 +91,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
 
     event MaxLoanDurationUpdated(uint256 _old, uint256 _new);
 
+    // Add or Update ERC20 to whitelist
     function updateERC20Whitelist(address _erc20Token, bool _status)
         external
         onlyOwner
@@ -118,6 +105,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         );
     }
 
+    // Check if a ERC20 token whitelisted or not
     function isERC20Whitelisted(address _erc20Token)
         public
         view
@@ -126,6 +114,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return erc20Whitelist[_erc20Token];
     }
 
+    // Update Platform Fee
     function updatePlatformFee(uint256 _newFee) external onlyOwner {
         require(
             _newFee <= 10000,
@@ -136,11 +125,21 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         emit PlatformFeeUpdated(_oldFee, _newFee);
     }
 
-    function isNFTOnLend(address _erc721Token, uint256 _tokenId) public view returns (bool) {
+    // Check if a NFT on Lend or not
+    function isNFTOnLend(address _erc721Token, uint256 _tokenId)
+        public
+        view
+        returns (bool)
+    {
         return _isOnLend[_erc721Token][_tokenId];
     }
 
-    function getActiveLoanId(address _erc721Token, uint256 _tokenId) public view returns (uint256) {
+    // Get Active Loan Id if any
+    function getActiveLoanId(address _erc721Token, uint256 _tokenId)
+        public
+        view
+        returns (uint256)
+    {
         return _loanIdByTokenAddressTokenId[_erc721Token][_tokenId];
     }
 
@@ -182,15 +181,15 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         );
         require(
             uint256(loan.loanDuration) != 0,
-            "lend:: tenure can not be zero"
+            "lend:: Tenure can not be zero"
         );
         require(
             uint256(loan.platformFee) == platformFee,
-            "lend:: platform fee has changed since this order was signed."
+            "lend:: Platform fee has changed since this order was signed."
         );
         require(
             erc20Whitelist[loan.whitelistedERC20],
-            "lend:: invalid whitelisted erc20 token"
+            "lend:: Invalid whitelisted erc20 token"
         );
         require(
             !_userNonce[msg.sender][_borrowerAndLenderNonces[0]],
@@ -233,9 +232,9 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         );
 
         loanIdToLoan[totalLoans] = loan;
-        totalLoans = totalLoans.add(1);
+        totalLoans = totalLoans + 1;
 
-        totalActiveLoans = totalActiveLoans.add(1);
+        totalActiveLoans = totalActiveLoans + 1;
 
         IERC721(loan.erc721Contract).transferFrom(
             msg.sender,
@@ -249,8 +248,12 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         );
 
         _mint(_lender, loan.loanId);
-        _setTokenURI(loan.loanId, string(abi.encodePacked(_baseURI(), loan.loanId)));
-        _loanIdByTokenAddressTokenId[_erc721Contract][_nftTokenId] = loan.loanId;
+        _setTokenURI(
+            loan.loanId,
+            string(abi.encodePacked(_baseURI(), loan.loanId))
+        );
+        _loanIdByTokenAddressTokenId[_erc721Contract][_nftTokenId] = loan
+            .loanId;
 
         emit StartLoan(
             loan.loanId,
@@ -277,17 +280,16 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         require(msg.sender == loan.borrower, "payback:: Unauthorized");
         address lender = ownerOf(_loanId);
 
-        uint256 interestDue = (loan.repaymentAmount).sub(loan.loanPrincipalAmount);
+        uint256 interestDue = loan.repaymentAmount - loan.loanPrincipalAmount;
         uint256 fee = _computePlatformFee(
             interestDue,
             uint256(loan.platformFee)
         );
-        uint256 payoffAmount = ((loan.loanPrincipalAmount).add(interestDue))
-            .sub(fee);
+        uint256 payoffAmount = (loan.loanPrincipalAmount + interestDue) - fee;
 
         loanRepaidOrLiquidated[_loanId] = true;
 
-        totalActiveLoans = totalActiveLoans.sub(1);
+        totalActiveLoans = totalActiveLoans - 1;
 
         IERC20(loan.whitelistedERC20).transferFrom(
             loan.borrower,
@@ -326,9 +328,8 @@ contract PawnMyNFTMortgage is PawnMyNFT {
 
         Loan memory loan = loanIdToLoan[_loanId];
 
-        uint256 loanMaturityDate = (uint256(loan.loanStartTime)).add(
-            uint256(loan.loanDuration)
-        );
+        uint256 loanMaturityDate = uint256(loan.loanStartTime) +
+            uint256(loan.loanDuration);
         require(
             block.timestamp > loanMaturityDate,
             "liquidateLoan:: Not yet overdue"
@@ -338,7 +339,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
 
         loanRepaidOrLiquidated[_loanId] = true;
 
-        totalActiveLoans = totalActiveLoans.sub(1);
+        totalActiveLoans = totalActiveLoans - 1;
 
         locker.release(loan.erc721Contract, loan.nftTokenId, lender);
 
@@ -361,7 +362,10 @@ contract PawnMyNFTMortgage is PawnMyNFT {
     }
 
     // update lend duration - Called by Lender of ERC20 - _duration (in seconds)
-    function extendLoan(uint256 _loanId, uint256 _duration) external nonReentrant {
+    function extendLoan(uint256 _loanId, uint256 _duration)
+        external
+        nonReentrant
+    {
         require(
             !loanRepaidOrLiquidated[_loanId],
             "ExtendLoan:: Oops repaid or liquidated already"
@@ -373,16 +377,12 @@ contract PawnMyNFTMortgage is PawnMyNFT {
 
         require(lender == msg.sender, "ExtendLoan:: Only lender can extend");
 
-        loan.loanDuration = loan.loanDuration.add(_duration);
+        loan.loanDuration = loan.loanDuration + _duration;
 
-        emit ExtendedLoan(
-            _loanId,
-            block.timestamp,
-            _duration,
-            msg.sender
-        );
+        emit ExtendedLoan(_loanId, block.timestamp, _duration, msg.sender);
     }
 
+    // Update Nonce Before Loan
     function cancelLoanBeforeLoanHasBegun(uint256 _nonce) external {
         require(
             !_userNonce[msg.sender][_nonce],
@@ -391,13 +391,14 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         _userNonce[msg.sender][_nonce] = true;
     }
 
+    // Update Max Loan Duration
     function updateMaxLoanDuration(uint256 _newMaximumLoanDuration)
         external
         onlyOwner
     {
         require(
             _newMaximumLoanDuration != 0,
-            "updateMaxLoanDuration:: duration can not be zero"
+            "updateMaxLoanDuration:: Duration can not be zero"
         );
         uint256 _oldMaximumLoanDuration = maximumLoanDuration;
         maximumLoanDuration = _newMaximumLoanDuration;
@@ -407,6 +408,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         );
     }
 
+    // Nonce Verification or Status Check
     function checkWhetherNonceUsedByUserOrNot(address _user, uint256 _nonce)
         external
         view
@@ -415,6 +417,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return _userNonce[_user][_nonce];
     }
 
+    // Get Pauoff Amount for Loan
     function getPayoffAmount(uint256 _loanId)
         external
         view
@@ -424,14 +427,16 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return (loan.whitelistedERC20, loan.repaymentAmount);
     }
 
+    // Calculate Plaform Fee
     function _computePlatformFee(uint256 _interestDue, uint256 _fee)
         internal
         pure
         returns (uint256)
     {
-        return (_interestDue.mul(_fee)).div(10000);
+        return (_interestDue * (_fee)) / (10000);
     }
 
+    // Generate Lender Message
     function generateLenderMessage(
         uint256 _loanPrincipalAmount,
         uint256 _repaymentAmount,
@@ -461,6 +466,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
             );
     }
 
+    // Generate Borrower Message
     function generateBorrowerMessage(
         uint256 _nftTokenId,
         uint256 _borrowerNonce,
@@ -480,20 +486,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
             );
     }
 
-    function getEthSignedMessageHash(bytes32 _messageHash)
-        public
-        pure
-        returns (bytes32)
-    {
-        return
-            keccak256(
-                abi.encodePacked(
-                    "\x19Ethereum Signed Message:\n32",
-                    _messageHash
-                )
-            );
-    }
-
+    // Verify Lender Sign
     function verifyLenderSign(
         uint256 _loanPrincipalAmount,
         uint256 _repaymentAmount,
@@ -521,6 +514,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return recoverSigner(ethSignedMessageHash, signature) == _lender;
     }
 
+    // Verify Borrower Sign
     function verifyBorrowerSign(
         uint256 _nftTokenId,
         uint256 _borrowerNonce,
@@ -538,6 +532,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return recoverSigner(ethSignedMessageHash, signature) == _borrower;
     }
 
+    // Recover Signature
     function recoverSigner(
         bytes32 _ethSignedMessageHash,
         bytes memory _signature
@@ -546,6 +541,22 @@ contract PawnMyNFTMortgage is PawnMyNFT {
         return ecrecover(_ethSignedMessageHash, v, r, s);
     }
 
+    // Get Sign Message Hash
+    function getEthSignedMessageHash(bytes32 _messageHash)
+        public
+        pure
+        returns (bytes32)
+    {
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n32",
+                    _messageHash
+                )
+            );
+    }
+
+    // Split Signature
     function splitSignature(bytes memory sig)
         public
         pure
@@ -555,7 +566,7 @@ contract PawnMyNFTMortgage is PawnMyNFT {
             uint8 v
         )
     {
-        require(sig.length == 65, "invalid signature length");
+        require(sig.length == 65, "splitSignature:: Invalid signature length");
         assembly {
             r := mload(add(sig, 32))
             s := mload(add(sig, 64))

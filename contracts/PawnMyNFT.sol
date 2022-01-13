@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract PawnMyNFT is
+contract Pawn is
     ERC721,
     ERC721Enumerable,
     Pausable,
@@ -23,7 +23,7 @@ contract PawnMyNFT is
     mapping(uint256 => string) private _tokenURIs;
     string private _baseURIextended;
 
-    constructor() ERC721("PawnMyNFT", "PawnMyNFT") {
+    constructor() ERC721("Pawn", "Pawn") {
         _baseURIextended = "#";
     }
 

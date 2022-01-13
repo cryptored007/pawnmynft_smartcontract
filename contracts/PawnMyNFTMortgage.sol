@@ -5,14 +5,17 @@ import "./Pawn.sol";
 import "./Locker.sol";
 
 contract PawnMortgage is Pawn {
-    constructor(Locker _locker) {
+    constructor(Locker _locker, address payable _beneficiary) {
+        require(_beneficiary != address(0), "Initiate:: _beneficiary can not be zero address");
         locker = _locker;
+        beneficiary = _beneficiary;
     }
 
     uint256 public platformFee = 250;
     uint256 public totalLoans = 0;
     uint256 public totalActiveLoans = 0;
     uint256 public maximumLoanDuration = 105 weeks;
+    address payable public beneficiary;
 
     struct Loan {
         uint256 loanId;
@@ -90,6 +93,8 @@ contract PawnMortgage is Pawn {
     );
 
     event MaxLoanDurationUpdated(uint256 _old, uint256 _new);
+
+    event BeneficiaryUpdated(address oldBeneficiary, address newBeneficiary);
 
     // Add or Update ERC20 to whitelist
     function updateERC20Whitelist(address _erc20Token, bool _status)
@@ -296,7 +301,11 @@ contract PawnMortgage is Pawn {
             lender,
             payoffAmount
         );
-        IERC20(loan.whitelistedERC20).transferFrom(loan.borrower, owner(), fee);
+        IERC20(loan.whitelistedERC20).transferFrom(
+            loan.borrower,
+            beneficiary,
+            fee
+        );
 
         _isOnLend[loan.erc721Contract][loan.nftTokenId] = false;
 
@@ -572,5 +581,18 @@ contract PawnMortgage is Pawn {
             s := mload(add(sig, 64))
             v := byte(0, mload(add(sig, 96)))
         }
+    }
+
+    function updateBeneficiary(address payable _newBeneficiary)
+        external
+        onlyOwner
+    {
+        require(
+            _newBeneficiary != address(0),
+            "UpdateBeneficiary:: New Beneficiary can not be Zero Address"
+        );
+        address _oldBeneficiary = beneficiary;
+        beneficiary = _newBeneficiary;
+        emit BeneficiaryUpdated(_oldBeneficiary, _newBeneficiary);
     }
 }
